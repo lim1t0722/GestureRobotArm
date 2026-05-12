@@ -36,6 +36,11 @@ static uint8_t action_held = 0;
 #define MAX_VEL_MANUAL      4.0f
 #define MAX_ACCEL_MANUAL    1.5f
 
+#define K_SPRING_RETURN     0.06f
+#define K_DAMPING_RETURN    0.70f
+#define MAX_VEL_RETURN      2.0f
+#define MAX_ACCEL_RETURN    0.8f
+
 #define K_SPRING_GESTURE    0.22f
 #define K_DAMPING_GESTURE   0.60f
 #define MAX_VEL_GESTURE     5.0f
@@ -49,6 +54,31 @@ typedef struct {
 } ServoDyn_t;
 
 static ServoDyn_t dyn[3];
+
+static uint8_t IsReturningToRest(uint8_t channel)
+{
+    if (action_held) return 0;
+
+    float current = 0, target = 0;
+    switch (channel) {
+        case ARM_BIG:
+            current = current_pos.big_arm_angle;
+            target = target_pos.big_arm_angle;
+            break;
+        case ARM_SMALL:
+            current = current_pos.small_arm_angle;
+            target = target_pos.small_arm_angle;
+            break;
+        default:
+            return 0;
+    }
+
+    if (fabsf(target - LIFT_REST_BIG) < 1.0f || fabsf(target - LIFT_REST_SMALL) < 1.0f) {
+        float diff = fabsf(target - current);
+        if (diff > 5.0f) return 1;
+    }
+    return 0;
+}
 
 static float GetCurrentPos(uint8_t ch)
 {
@@ -108,10 +138,24 @@ static void Arm_MoveServo(uint8_t channel, float target_angle)
     float current = GetCurrentPos(channel);
     target_angle = ClampAngle(channel, target_angle);
 
-    float k_spring = (current_mode == MODE_GESTURE) ? K_SPRING_GESTURE : K_SPRING_MANUAL;
-    float k_damping = (current_mode == MODE_GESTURE) ? K_DAMPING_GESTURE : K_DAMPING_MANUAL;
-    float max_vel = (current_mode == MODE_GESTURE) ? MAX_VEL_GESTURE : MAX_VEL_MANUAL;
-    float max_accel = (current_mode == MODE_GESTURE) ? MAX_ACCEL_GESTURE : MAX_ACCEL_MANUAL;
+    float k_spring, k_damping, max_vel, max_accel;
+
+    if (current_mode == MODE_GESTURE) {
+        k_spring = K_SPRING_GESTURE;
+        k_damping = K_DAMPING_GESTURE;
+        max_vel = MAX_VEL_GESTURE;
+        max_accel = MAX_ACCEL_GESTURE;
+    } else if (IsReturningToRest(channel)) {
+        k_spring = K_SPRING_RETURN;
+        k_damping = K_DAMPING_RETURN;
+        max_vel = MAX_VEL_RETURN;
+        max_accel = MAX_ACCEL_RETURN;
+    } else {
+        k_spring = K_SPRING_MANUAL;
+        k_damping = K_DAMPING_MANUAL;
+        max_vel = MAX_VEL_MANUAL;
+        max_accel = MAX_ACCEL_MANUAL;
+    }
 
     float spring_force = (target_angle - current) * k_spring;
     float damping_force = -dyn[channel].velocity * k_damping;
@@ -181,7 +225,7 @@ void Arm_SetGestureMode(float roll, float pitch, float yaw)
 
 void Arm_SetManualKnob(uint16_t adc_value)
 {
-    target_pos.base_angle = (float)adc_value * 180.0f / 4095.0f;
+    target_pos.base_angle = 180.0f - (float)adc_value * 180.0f / 4095.0f;
 }
 
 void Arm_SetActionHold(uint8_t held)
