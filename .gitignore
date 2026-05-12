@@ -1,0 +1,23 @@
+# Build outputs
+Debug/
+*.o
+*.d
+*.su
+*.cyclo
+*.hex
+*.bin
+*.elf
+*.map
+*.list
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.settings/
+*.launch
+
+# Temporary files
+*.tmp
+*~
